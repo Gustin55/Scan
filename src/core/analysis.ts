@@ -48,6 +48,9 @@ function borderMask(w: number, h: number, band: number): Uint8Array {
 
 const LOG10 = Math.LN10;
 
+/** Part de la correction « monde gris » des tons moyens (0 = aucune, 1 = complète). */
+export const GRAY_WORLD_STRENGTH = 0.35;
+
 /**
  * Estime la transmission du support (masque orange) : pixels les plus clairs du bord
  * non exposé, en écartant la lumière directe (pixels saturés). Sans bord exploitable,
@@ -119,12 +122,16 @@ export function estimateInversion(lin: Float32Array, w: number, h: number, mono:
     const m = (percentile(s, 0.5) - dmin[c]) / (dmax[c] - dmin[c]);
     med[c] = Math.min(0.95, Math.max(0.05, m));
   }
-  // Balance des tons moyens : chaque canal ramené vers la moyenne géométrique des médianes,
-  // elle-même rapprochée d'un gris moyen (0,46 en valeur encodée).
+  // Tons moyens : un gamma commun amène la médiane vers un gris moyen ; la correction
+  // par canal (« monde gris ») n'est appliquée qu'à 35 %, car les niveaux par canal
+  // neutralisent déjà le masque, et une scène dominée par une couleur (ciel, feuillage)
+  // serait sinon décolorée.
   const geo = Math.cbrt(med[0] * med[1] * med[2]);
   const target = Math.min(0.55, Math.max(0.32, 0.5 * geo + 0.5 * 0.46));
+  const common = Math.log(target) / Math.log(geo);
   for (let c = 0; c < 3; c++) {
-    const g = Math.log(target) / Math.log(med[c]);
+    const own = Math.log(target) / Math.log(med[c]);
+    const g = common * Math.pow(own / common, GRAY_WORLD_STRENGTH);
     gamma[c] = Math.min(2.5, Math.max(0.4, g));
   }
   if (mono) {

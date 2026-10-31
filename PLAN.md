@@ -130,6 +130,17 @@ fixtures/        images de test générées (scripts/gen-fixtures.ts)
 - [x] ZIP en flux avec modèle de nommage `{nom}_{film}_{n}`.
 - [x] Export unitaire JPEG, PNG, TIFF 16 bits.
 
+## État et mesures
+
+Les trois phases sont implémentées et couvertes par 50 tests unitaires et 10 parcours
+Playwright (voir le README pour les mesures). Écarts connus :
+
+- La détection automatique des négatifs N&B exige un bord de film visible ; sinon l'image
+  est traitée comme un positif (bouton « C'est un négatif » sous l'aperçu).
+- La balance automatique des tons moyens n'applique la correction « monde gris » qu'à 35 %
+  (`GRAY_WORLD_STRENGTH`) : compromis entre dominantes résiduelles et scènes monochromes.
+- Pas de recadrage : le bord du film apparaît noir après inversion.
+
 ## Questions ouvertes (hypothèses retenues en attendant une réponse)
 
 1. **Fichiers après rechargement.** Un navigateur ne peut pas relire un fichier sans
