@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { compile, packTrc, resolveKind } from '../core/compile.ts';
 import type { InputColor } from '../core/icc.ts';
+import { defaultGeometry, outputSize } from '../core/geometry.ts';
 import { Renderer, RendererError } from '../gl/renderer.ts';
-import { cancelThumb, edit, fileRef, itemById, lookFor, markError, scheduleThumb, setAnalysis, thumbFromPreview, useStore } from '../state/store.ts';
+import { cancelThumb, edit, fileRef, itemById, lookFor, markError, scheduleThumb, setAnalysis, thumbFromPreview, useStore, type Item } from '../state/store.ts';
 import { inputColorFor } from '../workers/imaging.ts';
 import { CancelledError, interactivePool } from '../workers/pool.ts';
 import type { PreviewResult } from '../workers/protocol.ts';
 import { useUi } from './uiStore.ts';
+import { neutralizeDelta } from '../core/whitebalance.ts';
 
 const KIND_LABEL = { positive: 'positif', 'negative-color': 'négatif couleur', 'negative-bw': 'négatif N&B' } as const;
 
@@ -20,10 +22,53 @@ function remember(id: string, c: Cached) {
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!);
 }
 
-declare global {
-  interface Window { __scan?: { renderer?: Renderer; lastRenderMs: number; previewReady: string | null; measure(): number } }
+const inflight = new Map<string, { p: Promise<PreviewResult>; ac: AbortController }>();
+
+/** Demande l'aperçu d'une image (partagé si déjà en cours). Produit aussi sa miniature si besoin. */
+function requestPreview(it: Item, maxEdge: number, priority: number) {
+  const existing = inflight.get(it.id);
+  if (existing) return existing;
+  const ac = new AbortController();
+  const needThumb = it.status !== 'ready';
+  if (needThumb) cancelThumb(it.id);
+  const p = interactivePool
+    .run(
+      'preview',
+      {
+        ref: fileRef(it), maxEdge, transfer: it.settings.input.transfer,
+        settings: needThumb ? it.settings : undefined, look: needThumb ? lookFor(it.settings) : undefined,
+      },
+      { signal: ac.signal, priority },
+    )
+    .then((res) => {
+      remember(it.id, { res, colors: new Map() });
+      // Analyse posée avant l'affichage : pas d'image non inversée, même un instant.
+      setAnalysis(it.id, res.analysis, res.info);
+      if (res.thumb) void thumbFromPreview(it.id, res.thumb, res.info, res.analysis);
+      return res;
+    })
+    .catch((e) => {
+      // Aperçu abandonné : la miniature repasse en arrière-plan.
+      if (e instanceof CancelledError && needThumb) scheduleThumb(it.id, false);
+      throw e;
+    })
+    .finally(() => inflight.delete(it.id));
+  const entry = { p, ac };
+  inflight.set(it.id, entry);
+  return entry;
 }
-window.__scan = { lastRenderMs: 0, previewReady: null, measure: () => 0 };
+
+function prefetchNext(id: string, maxEdge: number) {
+  const items = useStore.getState().items;
+  const next = items[items.findIndex((i) => i.id === id) + 1];
+  if (!next || cache.has(next.id) || inflight.has(next.id) || next.status === 'offline' || next.status === 'error' || !(next.file || next.handle)) return;
+  requestPreview(next, maxEdge, 0).p.catch(() => undefined);
+}
+
+declare global {
+  interface Window { __scan?: { renderer?: Renderer; lastRenderMs: number; previewReady: string | null; measure(): number; cached(): string[] } }
+}
+window.__scan = { lastRenderMs: 0, previewReady: null, measure: () => 0, cached: () => [...cache.keys()] };
 
 export function Viewer() {
   const currentId = useStore((s) => s.currentId);
@@ -38,6 +83,8 @@ export function Viewer() {
   const [loading, setLoading] = useState(false);
   const [box, setBox] = useState({ w: 800, h: 600 });
   const frame = useRef(0);
+  const histTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const picking = useUi((s) => s.picking);
 
   useEffect(() => {
     try {
@@ -57,49 +104,33 @@ export function Viewer() {
     return () => ro.disconnect();
   }, []);
 
-  // Chargement de l'aperçu de l'image courante.
+  // Chargement de l'aperçu de l'image courante, puis préchargement de la suivante.
   const offline = item?.status === 'offline';
   const hasFile = !!(item?.file || item?.handle);
   useEffect(() => {
-    if (!currentId || !renderer.current || !hasFile || offline) return;
+    const r = renderer.current;
+    if (!currentId || !r || !hasFile || offline) return;
+    // Les préchargements devenus inutiles libèrent le worker d'aperçu.
+    for (const [id, f] of inflight) if (id !== currentId) f.ac.abort();
+    const maxEdge = Math.min(2560, r.gl.getParameter(r.gl.MAX_TEXTURE_SIZE) as number);
+    const show = (res: PreviewResult) => {
+      r.setImage(res.preview, res.proxy, res.info.width, res.info.height);
+      setLoaded(currentId);
+      prefetchNext(currentId, maxEdge);
+    };
     const hit = cache.get(currentId);
     if (hit) {
       remember(currentId, hit);
-      renderer.current.setImage(hit.res.preview, hit.res.proxy, hit.res.info.width, hit.res.info.height);
-      setLoaded(currentId);
+      show(hit.res);
       return;
     }
-    const ac = new AbortController();
-    const it = itemById(currentId)!;
+    let alive = true;
     setLoading(true);
-    const maxTex = renderer.current.gl.getParameter(renderer.current.gl.MAX_TEXTURE_SIZE) as number;
-    const needThumb = it.status !== 'ready';
-    if (needThumb) cancelThumb(currentId);
-    let settled = false;
-    interactivePool
-      .run(
-        'preview',
-        {
-          ref: fileRef(it), maxEdge: Math.min(2560, maxTex), transfer: it.settings.input.transfer,
-          settings: needThumb ? it.settings : undefined, look: needThumb ? lookFor(it.settings) : undefined,
-        },
-        { signal: ac.signal, priority: 10 },
-      )
-      .then((res) => {
-        const entry: Cached = { res, colors: new Map() };
-        remember(currentId, entry);
-        if (res.thumb) void thumbFromPreview(currentId, res.thumb, res.info, res.analysis);
-        else setAnalysis(currentId, res.analysis, res.info);
-        renderer.current?.setImage(res.preview, res.proxy, res.info.width, res.info.height);
-        setLoaded(currentId);
-      })
+    requestPreview(itemById(currentId)!, maxEdge, 10).p
+      .then((res) => { if (alive) show(res); })
       .catch((e) => { if (!(e instanceof CancelledError)) markError(currentId, e instanceof Error ? e.message : String(e)); })
-      .finally(() => { settled = true; setLoading(false); });
-    return () => {
-      ac.abort();
-      // Aperçu abandonné (autre image ouverte) : la miniature repasse en arrière-plan.
-      if (needThumb && !settled) scheduleThumb(currentId, false);
-    };
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, [currentId, hasFile, offline]);
 
   // Réanalyse quand la courbe d'entrée change (même image).
@@ -132,7 +163,9 @@ export function Viewer() {
 
   // Taille d'affichage : ajustée à la zone, ou 1:1 avec l'aperçu en mode zoom.
   const entry = item ? cache.get(item.id) : undefined;
-  const pw = entry?.res.preview.width ?? 1, ph = entry?.res.preview.height ?? 1;
+  const geo = item?.settings.geometry ?? defaultGeometry();
+  const out = entry ? outputSize(entry.res.preview.width, entry.res.preview.height, geo) : { w: 1, h: 1 };
+  const pw = out.w, ph = out.h;
   const dpr = window.devicePixelRatio || 1;
   const fit = Math.min(box.w / pw, box.h / ph);
   const cssW = zoom ? pw / dpr : Math.max(1, Math.floor(pw * fit));
@@ -149,8 +182,35 @@ export function Viewer() {
       r.render({ draft: dragging, before }, backW, backH);
       window.__scan!.lastRenderMs = r.lastFrameMs;
       window.__scan!.previewReady = loaded;
+      // Histogramme : seulement sur l'image définitive, et pas à chaque image d'un glissement.
+      clearTimeout(histTimer.current);
+      if (!dragging && !before) {
+        histTimer.current = setTimeout(() => void r.histogramAsync().then((hist) => { if (hist) useUi.setState({ hist }); }), 150);
+      }
     });
   }, [compiled, dragging, before, backW, backH, loaded]);
+
+  /** Pipette : rend neutre la zone cliquée (3 itérations, la courbe de tonalité n'étant pas linéaire). */
+  const pickNeutral = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const r = renderer.current;
+    const it = item;
+    if (!r || !it || !compiled) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const u = (e.clientX - rect.left) / rect.width, v = (e.clientY - rect.top) / rect.height;
+    const entry = cache.get(it.id)!;
+    const col = entry.colors.get(it.settings.input.transfer)!;
+    let { temperature, tint } = it.settings;
+    for (let k = 0; k < 3; k++) {
+      const s = { ...it.settings, temperature, tint };
+      r.setParams(compile({ settings: s, look: lookFor(s), analysis: it.analysis, color: col.color, packedTrc: col.trc }));
+      r.render({ draft: false, before: false }, backW, backH);
+      const d = neutralizeDelta(r.readAverage(u, v, 9));
+      temperature = Math.max(-100, Math.min(100, temperature + d.temperature));
+      tint = Math.max(-100, Math.min(100, tint + d.tint));
+    }
+    edit(it.id, (x) => { x.temperature = Math.round(temperature); x.tint = Math.round(tint); });
+    useUi.setState({ picking: false });
+  };
 
   useEffect(() => {
     window.__scan!.measure = () => {
@@ -185,7 +245,8 @@ export function Viewer() {
           data-testid="preview"
           role="img"
           aria-label={item ? `Aperçu de ${item.name}${before ? ' (original)' : ''}` : 'Aperçu'}
-          style={{ width: cssW, height: cssH, display: item && loaded === item.id ? 'block' : 'none' }}
+          style={{ width: cssW, height: cssH, display: item && loaded === item.id ? 'block' : 'none', cursor: picking ? 'crosshair' : undefined }}
+          onClick={picking ? pickNeutral : undefined}
         />
       </div>
       {before && loaded && <div className="before-tag">Avant</div>}
@@ -193,7 +254,7 @@ export function Viewer() {
       {info && (
         <div className="viewer-bar" style={{ borderTop: '1px solid var(--border)', borderBottom: 0 }}>
           <span className="info" style={{ marginLeft: 0 }}>
-            {info.width} × {info.height} px · {info.bits} bits · {info.profile} · {KIND_LABEL[kind]}{autoKind ? ' (détecté)' : ''}
+            {info.width} × {info.height} px{(() => { const o = outputSize(info.width, info.height, geo); return o.w !== info.width || o.h !== info.height ? ` → ${o.w} × ${o.h} px` : ''; })()} · {info.bits} bits · {info.profile} · {KIND_LABEL[kind]}{autoKind ? ' (détecté)' : ''}
             {info.warning ? ` · ⚠ ${info.warning}` : ''}
           </span>
           {autoKind && item && kind === 'positive' && (
@@ -206,7 +267,7 @@ export function Viewer() {
 }
 
 function ViewerBar() {
-  const { before, zoom } = useUi();
+  const { before, zoom, picking } = useUi();
   const hold = (v: boolean) => () => useUi.setState({ before: v });
   return (
     <div className="viewer-bar">
@@ -223,6 +284,16 @@ function ViewerBar() {
         title="Maintenir pour voir l’original (touche B)"
       >
         Avant / après
+      </button>
+      <button
+        type="button"
+        className="btn"
+        aria-pressed={picking}
+        data-testid="picker"
+        onClick={() => useUi.setState({ picking: !picking })}
+        title="Cliquez ensuite sur une zone qui devrait être grise ou blanche (Échap pour annuler)"
+      >
+        Pipette gris neutre
       </button>
       <button type="button" className="btn" aria-pressed={zoom} onClick={() => useUi.setState({ zoom: !zoom })} title="Afficher l’aperçu pixel pour pixel (touche Z)">
         {zoom ? 'Ajuster' : '100 %'}

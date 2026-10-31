@@ -2,6 +2,7 @@ import type { Analysis } from './compile.ts';
 import type { InputColor } from './icc.ts';
 import type { Raster } from './raster.ts';
 import type { InversionParams, RGB } from './settings.ts';
+import type { Rect } from './geometry.ts';
 
 function percentile(sorted: Float32Array, p: number): number {
   if (sorted.length === 0) return 0;
@@ -173,14 +174,48 @@ export function detectKind(lin: Float32Array, w: number, h: number): { kind: Ana
   return { kind: 'positive', confidence: 1 - score };
 }
 
+/**
+ * Détecte la zone image d'un négatif : les rangées et colonnes du bord ont une densité
+ * proche de celle du support (bord non exposé) ou très forte (cache du scanner).
+ */
+export function detectFrame(lin: Float32Array, w: number, h: number, base: RGB): Rect | null {
+  const bl = 0.2126 * base[0] + 0.7152 * base[1] + 0.0722 * base[2];
+  const image = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const l = Math.max(1e-6, 0.2126 * lin[i * 3] + 0.7152 * lin[i * 3 + 1] + 0.0722 * lin[i * 3 + 2]);
+    const d = Math.log(bl / l) / LOG10;
+    image[i] = d > 0.07 && d < 2.4 ? 1 : 0;
+  }
+  const rowFrac = (y: number) => { let n = 0; for (let x = 0; x < w; x++) n += image[y * w + x]; return n / w; };
+  const colFrac = (x: number) => { let n = 0; for (let y = 0; y < h; y++) n += image[y * w + x]; return n / h; };
+  // Une rangée de bord ne contient presque rien qui ressemble à de l'image (≤ 12 %,
+  // pour tolérer les numéros de vue imprimés sur le bord).
+  const scan = (len: number, frac: (i: number) => number, from: number, step: 1 | -1) => {
+    let i = from;
+    for (let k = 0; k < len && frac(i) <= 0.12; k++) i += step;
+    return i;
+  };
+  const y0 = scan(h, rowFrac, 0, 1), y1 = scan(h, rowFrac, h - 1, -1);
+  const x0 = scan(w, colFrac, 0, 1), x1 = scan(w, colFrac, w - 1, -1);
+  if (x1 <= x0 || y1 <= y0) return null;
+  // Petite marge intérieure pour ne pas garder de liseré.
+  const ix = 0.004 * w, iy = 0.004 * h;
+  const r: Rect = { x0: (x0 + ix) / w, y0: (y0 + iy) / h, x1: (x1 + 1 - ix) / w, y1: (y1 + 1 - iy) / h };
+  if ((r.x1 - r.x0) * (r.y1 - r.y0) < 0.3) return null;
+  if (r.x0 < 0.005 && r.y0 < 0.005 && r.x1 > 0.995 && r.y1 > 0.995) return null;
+  return r;
+}
+
 export function analyze(proxy: Raster, color: InputColor): Analysis {
   const lin = toLinear(proxy, color);
   const { width: w, height: h } = proxy;
   const det = detectKind(lin, w, h);
+  const colorInv = estimateInversion(lin, w, h, false);
   return {
     detectedKind: det.kind,
     confidence: det.confidence,
-    color: estimateInversion(lin, w, h, false),
+    color: colorInv,
     bw: estimateInversion(lin, w, h, true),
+    frame: detectFrame(lin, w, h, colorInv.base),
   };
 }

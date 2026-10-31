@@ -39,7 +39,7 @@ vec3 stage1(vec3 enc) {
 }
 
 void main() {
-  vec3 c = stage1(texture(u_src, v_uv).rgb);
+  vec3 c = stage1(texture(u_src, sourceUV(v_uv)).rgb);
   if (u_maskOnly == 1) {
     float m = smoothstep(u_threshold, 1.0, luma(c));
     o_color = vec4(m, m, m, 1.0);

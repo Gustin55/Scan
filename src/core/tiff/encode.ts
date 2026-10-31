@@ -12,6 +12,8 @@ export interface TiffEncodeOptions {
   icc?: Uint8Array;
   rowsPerStrip?: number;
   software?: string;
+  /** Étiquette Orientation (1 = normale). */
+  orientation?: number;
 }
 
 interface Entry { tag: number; type: number; values: number[] | Uint8Array }
@@ -73,6 +75,7 @@ export function encodeTiff(raster: Raster, opts: TiffEncodeOptions = {}): Uint8A
     { tag: TAG.ResolutionUnit, type: 3, values: [2] },
     { tag: TAG.Software, type: 2, values: software },
   ];
+  if (opts.orientation && opts.orientation !== 1) entries.push({ tag: TAG.Orientation, type: 3, values: [opts.orientation] });
   if (predictor && comp !== 1) entries.push({ tag: TAG.Predictor, type: 3, values: [2] });
   entries.push({ tag: TAG.SampleFormat, type: 3, values: new Array(channels).fill(1) });
   if (opts.icc) entries.push({ tag: TAG.ICCProfile, type: 7, values: opts.icc });

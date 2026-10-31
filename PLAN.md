@@ -124,6 +124,12 @@ fixtures/        images de test générées (scripts/gen-fixtures.ts)
 - [x] Export / import des réglages en JSON.
 - [x] Annuler / rétablir (`Ctrl+Z`, `Ctrl+Maj+Z`).
 
+### Ajouts après relecture
+- [x] Cadrage : rotation, miroir, rognage, recadrage automatique du bord du film.
+- [x] Orientation TIFF (étiquette 274).
+- [x] Pipette de balance des blancs, histogramme RVB.
+- [x] Préchargement de l'image suivante ; un seul décodage pour l'aperçu et la miniature.
+
 ### Phase 3 — lot et export
 - [x] Copier / coller des réglages, préset sur une sélection.
 - [x] File d'export : 2 à 4 travaux, progression, annulation, reprise après rechargement.
@@ -139,7 +145,9 @@ Playwright (voir le README pour les mesures). Écarts connus :
   est traitée comme un positif (bouton « C'est un négatif » sous l'aperçu).
 - La balance automatique des tons moyens n'applique la correction « monde gris » qu'à 35 %
   (`GRAY_WORLD_STRENGTH`) : compromis entre dominantes résiduelles et scènes monochromes.
-- Pas de recadrage : le bord du film apparaît noir après inversion.
+- Le recadrage se règle par marges (curseurs) ; pas encore de poignées à la souris sur
+  l'aperçu ni de rapport d'aspect imposé.
+- Seul Chromium est testé automatiquement (Firefox et Safari non vérifiés).
 
 ## Questions ouvertes (hypothèses retenues en attendant une réponse)
 

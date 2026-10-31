@@ -1,6 +1,7 @@
 import { unzlibSync, inflateSync } from 'fflate';
 import { createRaster, type Raster } from '../raster.ts';
 import { lzwDecode, packBitsDecode } from './lzw.ts';
+import { geometryFromOrientation, transformRaster } from '../geometry.ts';
 
 export const TAG = {
   NewSubfileType: 254,
@@ -292,6 +293,9 @@ export function decodeTiff(buf: ArrayBuffer | Uint8Array, opts: DecodeOptions = 
       }
     }
   }
+  // Orientation (scanners et appareils qui la renseignent) : appliquée au décodage.
+  const orientation = num(ifd, TAG.Orientation, 1);
+  if (orientation > 1 && orientation <= 8) return transformRaster(raster, geometryFromOrientation(orientation));
   return raster;
 }
 

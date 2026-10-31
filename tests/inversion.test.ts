@@ -101,3 +101,18 @@ describe('réglages fins', () => {
     expect(darker.dmin[1]).toBeGreaterThan(base.dmin[1]);
   });
 });
+
+describe('recadrage automatique', () => {
+  it('trouve la zone image à l’intérieur du bord non exposé', () => {
+    const a = analyze(neg, srgb);
+    expect(a.frame).toBeTruthy();
+    const f = a.frame!;
+    expect(f.x0 * neg.width).toBeGreaterThanOrEqual(B - 1);
+    expect(f.x0 * neg.width).toBeLessThan(B + 3);
+    expect(f.y1 * neg.height).toBeGreaterThan(neg.height - B - 3);
+    expect(f.y1 * neg.height).toBeLessThanOrEqual(neg.height - B + 1);
+  });
+  it('rien quand il n’y a pas de bord', () => {
+    expect(analyze(simulateNegative(scene, W, H, 0), srgb).frame).toBeNull();
+  });
+});

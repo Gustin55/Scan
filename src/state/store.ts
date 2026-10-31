@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Analysis } from '../core/compile.ts';
 import { fingerprint, fileKind } from '../core/fingerprint.ts';
 import { History } from '../core/history.ts';
+import { curveEvaluator, isIdentityCurve, type Curve } from '../core/curves.ts';
 import { BUILTIN_PRESETS, findPreset, slugify, type FilmLook } from '../core/presets.ts';
 import {
   cloneSettings, defaultSettings, NEUTRAL_GRAIN, NEUTRAL_HALATION, NEUTRAL_VIGNETTE, sanitizeSettings, settingsEqual, settingsFromJson, settingsToJson, transferableSettings,
@@ -155,6 +156,20 @@ function persistSession() {
 }
 
 const settingsTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Écrit tout de suite les réglages en attente (fermeture ou masquage de l'onglet). */
+export function flushPending() {
+  for (const [id, t] of settingsTimers) {
+    clearTimeout(t);
+    const it = itemById(id);
+    if (it) void db.saveSettings(id, it.settings);
+  }
+  settingsTimers.clear();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushPending);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushPending(); });
+}
 function persistSettings(id: string) {
   clearTimeout(settingsTimers.get(id));
   settingsTimers.set(id, setTimeout(() => {
@@ -357,9 +372,10 @@ export function pasteSettings(ids: string[]) {
   if (!clip || !ids.length) return;
   for (const id of ids) {
     edit(id, (s) => {
-      const inv = s.inversion;
+      const { inversion, geometry } = s;
       Object.assign(s, cloneSettings(clip));
-      s.inversion = inv;
+      s.inversion = inversion;
+      s.geometry = geometry;
     });
   }
   notify(`Réglages collés sur ${ids.length} image(s).`, 'success', 2500);
@@ -406,13 +422,35 @@ export async function saveUserPreset(name: string, from: Settings): Promise<Film
     vignette: scaled(from.vignette as never, base?.vignette as never, ['amount'], NEUTRAL_VIGNETTE as never),
     sharpen: { amount: from.sharpen?.amount ?? (base?.sharpen.amount ?? 0) * k },
   };
-  // Les courbes du préset sont figées à l'intensité courante ; celles de l'utilisateur restent dans les réglages.
-  if (base && k < 1) look.curves = {};
+  // Courbes : celles du préset à l'intensité courante, suivies de celles de l'utilisateur,
+  // échantillonnées en 17 points par canal.
+  look.curves = composeCurves(base, k, from);
   const presets = [...get().userPresets, look];
   setState({ userPresets: presets });
   await db.savePresets(presets);
   notify(`Préset « ${look.name} » enregistré.`, 'success');
   return look;
+}
+
+function composeCurves(base: FilmLook | undefined, k: number, s: Settings): FilmLook['curves'] {
+  const blend = (c: Curve | undefined) => {
+    if (!c || isIdentityCurve(c) || k <= 0) return (x: number) => x;
+    const f = curveEvaluator(c);
+    return (x: number) => x + (f(x) - x) * k;
+  };
+  const user = (c: Curve) => (isIdentityCurve(c) ? (x: number) => x : curveEvaluator(c));
+  const pMaster = blend(base?.curves.rgb), uMaster = user(s.curves.rgb);
+  const out: FilmLook['curves'] = {};
+  const sample = (f: (x: number) => number): Curve => Array.from({ length: 17 }, (_, i) => [i / 16, f(i / 16)] as [number, number]);
+  if (!isIdentityCurve(base?.curves.rgb) && k > 0) out.rgb = sample(pMaster);
+  for (const ch of ['r', 'g', 'b'] as const) {
+    const p = blend(base?.curves[ch]), u = user(s.curves[ch]);
+    // Ordre du pipeline : canal du préset, puis maître utilisateur, puis canal utilisateur.
+    if (!isIdentityCurve(base?.curves[ch]) || !isIdentityCurve(s.curves.rgb) || !isIdentityCurve(s.curves[ch])) {
+      out[ch] = sample((x) => u(uMaster(p(x))));
+    }
+  }
+  return out;
 }
 
 export async function deleteUserPreset(id: string) {
@@ -452,6 +490,13 @@ export function importSettingsJson(text: string, targetIds: string[]): number {
     if (!it) continue;
     edit(it.id, (s) => Object.assign(s, e.settings));
     applied++;
+  }
+  // Fichier d'une seule image qui ne correspond à rien : appliqué à la sélection, sans le cadrage.
+  if (!applied && entries.length === 1) {
+    for (const id of targetIds) {
+      edit(id, (s) => { const { geometry, inversion } = s; Object.assign(s, entries[0].settings); s.geometry = geometry; s.inversion = inversion; });
+      applied++;
+    }
   }
   return applied;
 }

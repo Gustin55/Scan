@@ -1,5 +1,6 @@
 import type { Curve } from './curves.ts';
 import { IDENTITY_CURVE, normalizeCurve } from './curves.ts';
+import { defaultGeometry, sanitizeGeometry, type Geometry } from './geometry.ts';
 
 export type InputKind = 'auto' | 'positive' | 'negative-color' | 'negative-bw';
 export type ResolvedKind = Exclude<InputKind, 'auto'>;
@@ -43,6 +44,8 @@ export interface Settings {
   halation: HalationParams | null;
   vignette: VignetteParams | null;
   sharpen: SharpenParams | null;
+  /** Recadrage, rotation, miroir. */
+  geometry: Geometry;
 }
 
 export const NEUTRAL_GRAIN: GrainParams = { amount: 0, size: 1, roughness: 0.5, color: 0, luminance: 0.6 };
@@ -73,6 +76,7 @@ export function defaultSettings(): Settings {
     halation: null,
     vignette: null,
     sharpen: null,
+    geometry: defaultGeometry(),
   };
 }
 
@@ -157,6 +161,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   if (isObj(raw.halation)) s.halation = sanitizeHalation(raw.halation);
   if (isObj(raw.vignette)) s.vignette = sanitizeVignette(raw.vignette);
   if (isObj(raw.sharpen)) s.sharpen = { amount: clampN(raw.sharpen.amount, 0, 2, 0) };
+  if (isObj(raw.geometry)) s.geometry = sanitizeGeometry(raw.geometry);
   return s;
 }
 
@@ -192,10 +197,11 @@ export function settingsEqual(a: Settings, b: Settings): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Réglages « copiables » vers une autre image : tout sauf l'inversion mesurée sur l'image. */
+/** Réglages « copiables » vers une autre image : sans l'inversion mesurée ni le cadrage. */
 export function transferableSettings(s: Settings): Settings {
   const c = cloneSettings(s);
   c.inversion = null;
+  c.geometry = defaultGeometry();
   return c;
 }
 

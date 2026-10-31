@@ -14,7 +14,12 @@ aucune clé d'API.
 - **10 présets** de film décrits en JSON, curseur d'intensité, avant/après maintenu.
 - **Réglages avancés** repliables : balance des blancs, exposition, contraste, saturation,
   courbes RVB et par canal, grain, halo, vignettage, netteté.
-- **Aperçu temps réel WebGL2**, en basse définition pendant un glissement.
+- **Cadrage** : rotation par quarts de tour, miroir, rognage par bord, et **recadrage
+  automatique** qui retire le bord non exposé du film. L'orientation des TIFF est respectée.
+- **Pipette** de balance des blancs (cliquer sur une zone qui devrait être grise) et
+  **histogramme** RVB avec le pourcentage de noirs bouchés et de blancs brûlés.
+- **Aperçu temps réel WebGL2**, en basse définition pendant un glissement ; l'image suivante
+  de la grille est préchargée.
 - **Historique** (annuler/rétablir), copier-coller de réglages, préset sur une sélection,
   présets personnels, export/import des réglages en JSON. Tout est sauvegardé dans IndexedDB.
 - **Export** JPEG, PNG ou TIFF 16 bits (profil sRGB embarqué), en lot dans un ZIP généré en
@@ -72,6 +77,11 @@ Raccourcis : `?` dans l'application.
 | `Ctrl+Z`, `Ctrl+Maj+Z` | Annuler, rétablir |
 | `Ctrl+Maj+C`, `Ctrl+Maj+V` | Copier, coller les réglages (sur la sélection) |
 | Flèches, `Maj`, `Espace`, `Ctrl+A` dans la grille | Navigation et sélection |
+| `Échap` | Quitter la pipette |
+
+Pour retirer le bord noir du film après inversion : panneau **Cadrage › Recadrage auto**.
+Pour corriger une dominante : **Pipette gris neutre** puis clic sur un gris, un blanc ou un
+mur neutre (`Échap` pour annuler).
 
 Astuce pellicule : sélectionnez toutes les vues d'une même bobine, ouvrez **Inversion du
 négatif** et cliquez **Même inversion pour la sélection** pour leur appliquer le même
@@ -79,8 +89,9 @@ masque et les mêmes niveaux.
 
 ## Tests
 
-Tests unitaires (Vitest) : décodeur/encodeur TIFF, LZW, profils ICC, estimation du masque,
-inversion, courbes, présets, pipeline de rendu, nommage, historique, réglages JSON.
+Tests unitaires (Vitest, 62 tests) : décodeur/encodeur TIFF (dont l'orientation), LZW,
+profils ICC, estimation du masque, recadrage automatique, cadrage, inversion, courbes,
+présets, pipeline de rendu, pipette, nommage, historique, réglages JSON.
 
 ```bash
 npm test
@@ -89,7 +100,8 @@ npm test
 Parcours complets (Playwright, Chromium avec WebGL2 logiciel) : import de 50 images,
 latence de l'aperçu, avant/après, annuler/rétablir, persistance, ZIP de 20 images,
 TIFF 16 bits, JSON, copier-coller, accessibilité, reprise d'export après rechargement,
-cohérence aperçu GPU / export CPU.
+cohérence aperçu GPU / export CPU, recadrage auto et rotation à l'export, pipette,
+histogramme, préchargement, import de dossier, glisser-déposer.
 
 ```bash
 npm run test:e2e
@@ -113,7 +125,7 @@ npx playwright test e2e/big.spec.ts
 | 50 images importées → 50 miniatures | ≈ 17 s, aucune tâche longue (> 50 ms) sur le thread principal |
 | Curseur d'intensité → nouvelle image (scan de 6 Mpx) | médiane 55–90 ms selon les exécutions |
 | ZIP de 20 images | ≈ 14 s, archive valide, JPEG lisibles |
-| Scan 40 Mpx : aperçu / export JPEG | ≈ 6,5 s / ≈ 28 s |
+| Scan 40 Mpx : aperçu / export JPEG | ≈ 6 s / ≈ 27 s |
 | Scan 40 Mpx : tas JS du thread principal | 47 Mo (l'image pleine résolution ne vit que dans un worker) |
 | Écart aperçu GPU / export CPU | ≤ 1,2 / 255 sur des moyennes de zones |
 

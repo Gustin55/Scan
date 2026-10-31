@@ -2,4 +2,4 @@
 uniform sampler2D u_src;
 in vec2 v_uv;
 out vec4 o_color;
-void main() { o_color = vec4(texture(u_src, v_uv).rgb, 1.0); }
+void main() { o_color = vec4(texture(u_src, sourceUV(v_uv)).rgb, 1.0); }

@@ -40,7 +40,7 @@ export function Slider(p: SliderProps) {
         aria-valuetext={fmt(p.value)}
         aria-description={p.description}
         onPointerDown={() => p.onBegin?.()}
-        onKeyDown={(e) => { if (!e.repeat && e.key.startsWith('Arrow')) p.onBegin?.(); }}
+        onKeyDown={(e) => { if (e.key !== 'Tab' && e.key !== 'Shift') p.onBegin?.(); }}
         onKeyUp={() => p.onEnd?.()}
         onPointerUp={() => p.onEnd?.()}
         onPointerCancel={() => p.onEnd?.()}

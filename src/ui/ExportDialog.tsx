@@ -22,7 +22,11 @@ export function ExportDialog() {
 
   useEffect(() => {
     const d = ref.current!;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      // Par défaut : la sélection si plusieurs images sont sélectionnées, sinon l'image affichée.
+      setScope(useStore.getState().selection.length > 1 ? 'selection' : 'current');
+      d.showModal();
+    }
     if (!open && d.open) d.close();
   }, [open]);
 

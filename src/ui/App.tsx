@@ -86,6 +86,7 @@ export function App() {
       else if (!mod && k === 'b' && !e.repeat) useUi.setState({ before: true });
       else if (!mod && k === 'z') useUi.setState((u) => ({ zoom: !u.zoom }));
       else if (!mod && e.key === '?') useUi.setState({ helpOpen: true });
+      else if (e.key === 'Escape' && useUi.getState().picking) useUi.setState({ picking: false });
     };
     const up = (e: KeyboardEvent) => { if (e.key.toLowerCase() === 'b') useUi.setState({ before: false }); };
     const blur = () => useUi.setState({ before: false });
@@ -118,7 +119,7 @@ export function App() {
         <button type="button" className="btn" onClick={() => void openFolder()}>Ajouter un dossier</button>
         <input ref={files} type="file" multiple accept=".tif,.tiff,.jpg,.jpeg,image/tiff,image/jpeg" hidden data-testid="file-input"
           onChange={(e) => { if (e.target.files) void importResult(collectFromFileList(e.target.files)); e.target.value = ''; }} />
-        <input ref={folder} type="file" multiple hidden {...{ webkitdirectory: '', directory: '' }}
+        <input ref={folder} type="file" multiple hidden data-testid="folder-input" {...{ webkitdirectory: '', directory: '' }}
           onChange={(e) => { if (e.target.files) void importResult(collectFromFileList(e.target.files)); e.target.value = ''; }} />
         <span className="spacer" />
         <button type="button" className="btn" onClick={() => useUi.setState({ helpOpen: true })} aria-label="Raccourcis clavier">?</button>
@@ -183,6 +184,7 @@ function Help() {
     ['Ctrl+Z / Ctrl+Maj+Z', 'Annuler / rétablir'],
     ['Ctrl+Maj+C / Ctrl+Maj+V', 'Copier / coller les réglages'],
     ['Ctrl+E', 'Exporter'],
+    ['Échap', 'Quitter la pipette'],
     ['Flèches (grille)', 'Image précédente / suivante'],
     ['Maj+flèches, Espace, Ctrl+A', 'Sélection'],
     ['Suppr (grille)', 'Retirer de la session'],

@@ -28,6 +28,11 @@ float grainNoise(vec2 p, float roughness, int seed) {
   return (n1 * (1.0 - 0.5 * roughness) + n2 * roughness) * 1.6;
 }
 
+// Cadrage : coordonnées de sortie → coordonnées de la texture source (matrice 2×3).
+uniform vec3 u_geo0;
+uniform vec3 u_geo1;
+vec2 sourceUV(vec2 uv) { vec3 p = vec3(uv, 1.0); return vec2(dot(u_geo0, p), dot(u_geo1, p)); }
+
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
 // Table 1D (RGBA, une ligne) échantillonnée avec interpolation linéaire manuelle.

@@ -11,6 +11,8 @@ import {
 } from '../state/store.ts';
 import { downloadBlob } from '../export/zip.ts';
 import { CurveEditor } from './CurveEditor.tsx';
+import { Histogram } from './Histogram.tsx';
+import { cropFromMargins, marginsFromCrop, rotateBy, defaultGeometry, type Margins } from '../core/geometry.ts';
 import { Slider } from './Slider.tsx';
 import { setDragging } from './uiStore.ts';
 
@@ -88,6 +90,7 @@ export function Panel() {
     <aside className="panel" aria-label="Réglages">
       <section aria-labelledby="h-type">
         <h2 id="h-type">Image</h2>
+        <Histogram />
         <div className="field">
           <label htmlFor="kind">Type</label>
           <select id="kind" data-testid="kind" value={s.input.kind} onChange={(e) => edit(id, (x) => { x.input.kind = e.target.value as InputKind; })}>
@@ -112,6 +115,34 @@ export function Panel() {
           </button>
         )}
       </section>
+
+      <details data-testid="geometry">
+        <summary>Cadrage {(s.geometry.rotate || s.geometry.flipH || s.geometry.crop) ? <span className="modified">modifié</span> : null}</summary>
+        <div className="row">
+          <button type="button" className="btn small" onClick={() => edit(id, (x) => { x.geometry = rotateBy(x.geometry, -1); })} aria-label="Pivoter de 90° vers la gauche">⟲ 90°</button>
+          <button type="button" className="btn small" onClick={() => edit(id, (x) => { x.geometry = rotateBy(x.geometry, 1); })} aria-label="Pivoter de 90° vers la droite">⟳ 90°</button>
+          <button type="button" className="btn small" aria-pressed={s.geometry.flipH} onClick={() => edit(id, (x) => { x.geometry = { ...x.geometry, flipH: !x.geometry.flipH }; })}>Miroir</button>
+          {kind !== 'positive' && item.analysis?.frame && (
+            <button type="button" className="btn small" data-testid="autocrop" title="Retire le bord non exposé du film"
+              onClick={() => edit(id, (x) => { x.geometry = { ...x.geometry, crop: { ...item.analysis!.frame! } }; })}>
+              Recadrage auto
+            </button>
+          )}
+        </div>
+        {(['left', 'right', 'top', 'bottom'] as const).map((side) => {
+          const label = { left: 'Rogner à gauche', right: 'Rogner à droite', top: 'Rogner en haut', bottom: 'Rogner en bas' }[side];
+          return (
+            <Slider key={side} label={label} min={0} max={0.45} step={0.002} defaultValue={0} format={pct}
+              {...bind((x) => marginsFromCrop(x.geometry)[side], (x, v) => {
+                const m: Margins = { ...marginsFromCrop(x.geometry), [side]: v };
+                x.geometry = { ...x.geometry, crop: cropFromMargins(m, x.geometry) };
+              })} />
+          );
+        })}
+        {(s.geometry.rotate || s.geometry.flipH || s.geometry.crop) ? (
+          <button type="button" className="btn small" onClick={() => edit(id, (x) => { x.geometry = defaultGeometry(); })}>Réinitialiser le cadrage</button>
+        ) : null}
+      </details>
 
       {kind !== 'positive' && (
         <details>
@@ -246,8 +277,10 @@ function EffectSection({ title, active, onReset, fromPreset, children }: { title
   );
 }
 
-function PresetList({ selected, onPick }: { selected: string | null; onPick: (id: string | null) => void }) {
+function PresetList({ selected: wanted, onPick }: { selected: string | null; onPick: (id: string | null) => void }) {
   const presets = allPresets();
+  // Un préset personnel supprimé est traité comme « aucun préset ».
+  const selected = presets.some((p) => p.id === wanted) ? wanted : null;
   const groups = new Map<string, FilmLook[]>();
   for (const p of presets) groups.set(p.category, [...(groups.get(p.category) ?? []), p]);
   const order: (string | null)[] = [null, ...presets.map((p) => p.id)];

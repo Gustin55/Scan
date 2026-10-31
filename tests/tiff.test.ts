@@ -114,3 +114,13 @@ describe('TIFF', () => {
     expect(() => decodeTiff(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow(/TIFF/);
   });
 });
+
+describe('orientation TIFF', () => {
+  it('applique l’étiquette Orientation (6 = rotation horaire de 90°)', () => {
+    const src = createRaster(3, 2, 1);
+    src.data.set([1, 2, 3, 4, 5, 6]);
+    const out = decodeTiff(encodeTiff(src, { orientation: 6, compression: 'none' }));
+    expect([out.width, out.height]).toEqual([2, 3]);
+    expect(Array.from(out.data)).toEqual([4, 1, 5, 2, 6, 3]);
+  });
+});

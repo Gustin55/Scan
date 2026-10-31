@@ -48,3 +48,15 @@ describe('nommage', () => {
     expect(slugify('Mon préset été !')).toBe('mon-preset-ete');
   });
 });
+
+describe('pipette de balance des blancs', () => {
+  it('la correction calculée neutralise une dominante appliquée par les gains', async () => {
+    const { whiteBalanceGains, linearToSrgb } = await import('../src/core/color.ts');
+    const { neutralizeDelta } = await import('../src/core/whitebalance.ts');
+    const g = whiteBalanceGains(30, -20);
+    const seen = g.map((v) => linearToSrgb(0.2 * v)) as [number, number, number];
+    const d = neutralizeDelta(seen);
+    expect(30 + d.temperature).toBeCloseTo(0, 5);
+    expect(-20 + d.tint).toBeCloseTo(0, 5);
+  });
+});

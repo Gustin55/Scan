@@ -1,6 +1,7 @@
 import type { Compiled } from '../core/compile.ts';
 import { TONE_LUT_SIZE } from '../core/compile.ts';
 import { GRAIN_CELLS, halationSigma } from '../core/pipeline.ts';
+import { outputSize, sourceMatrix, type Geometry } from '../core/geometry.ts';
 import vertSrc from './shaders/quad.vert?raw';
 import commonSrc from './shaders/common.glsl?raw';
 import stage1Src from './shaders/stage1.frag?raw';
@@ -161,9 +162,20 @@ export class Renderer {
     this.params = c;
   }
 
+  private bindGeometry(p: Prog, g: Geometry) {
+    const m = sourceMatrix(g);
+    this.gl.uniform3f(this.u(p, 'u_geo0'), m[0], m[1], m[2]);
+    this.gl.uniform3f(this.u(p, 'u_geo1'), m[3], m[4], m[5]);
+  }
+
+  /** Dimensions de l'image cadrée (pleine résolution) : rapport d'aspect de l'affichage. */
+  outputSizeFor(g: Geometry) { return outputSize(this.imageSize.w, this.imageSize.h, g); }
+  previewOutputSize(g: Geometry) { return outputSize(this.srcSize.w, this.srcSize.h, g); }
+
   private bindStage(p: Prog, c: Compiled, src: WebGLTexture) {
     const gl = this.gl;
     gl.useProgram(p.prog);
+    this.bindGeometry(p, c.geometry);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.trc);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.tone);
@@ -197,13 +209,13 @@ export class Renderer {
   /** Recalcule la carte de halo (basse résolution) si ses paramètres ont changé. */
   private updateHalo(c: Compiled) {
     const key = c.halation.amount > 0
-      ? JSON.stringify([c.halation.radius, c.halation.threshold, c.mode, c.base, c.dmin, c.drange, c.gamma, c.gains, c.mixer, c.saturation, c.splitShadows, c.splitHighlights, Array.from(c.tone.subarray(0, 4096).filter((_, i) => i % 97 === 0))])
+      ? JSON.stringify([c.geometry, c.halation.radius, c.halation.threshold, c.mode, c.base, c.dmin, c.drange, c.gamma, c.gains, c.mixer, c.saturation, c.splitShadows, c.splitHighlights, Array.from(c.tone.subarray(0, 4096).filter((_, i) => i % 97 === 0))])
       : 'off';
     if (key === this.haloKey) return;
     this.haloKey = key;
     if (key === 'off' || !this.proxy) return;
     const gl = this.gl;
-    const { w, h } = this.proxySize;
+    const { w, h } = outputSize(this.proxySize.w, this.proxySize.h, c.geometry);
     this.halo[0] = this.target(this.halo[0], w, h);
     this.halo[1] = this.target(this.halo[1], w, h);
     this.halo[2] = this.target(this.halo[2], w, h);
@@ -247,6 +259,7 @@ export class Renderer {
     if (req.before) {
       const p = this.progs.before;
       gl.useProgram(p.prog);
+      this.bindGeometry(p, c.geometry);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, source);
       gl.uniform1i(this.u(p, 'u_src'), 0);
@@ -281,13 +294,70 @@ export class Renderer {
     gl.uniform1f(this.u(fp, 'u_grainRough'), c.grain.roughness);
     gl.uniform1f(this.u(fp, 'u_grainColor'), c.grain.color);
     gl.uniform1f(this.u(fp, 'u_grainLum'), c.grain.luminance);
-    const { w: iw, h: ih } = this.imageSize;
+    const { w: iw, h: ih } = outputSize(this.imageSize.w, this.imageSize.h, c.geometry);
     const mn = Math.min(iw, ih), mx = Math.max(iw, ih);
     const gs = GRAIN_CELLS / c.grain.size;
     gl.uniform2f(this.u(fp, 'u_grainScale'), (iw / mn) * gs, (ih / mn) * gs);
     gl.uniform2f(this.u(fp, 'u_aspect'), iw / mx, ih / mx);
     this.draw(null, w, h);
     this.lastFrameMs = performance.now() - t0;
+  }
+
+  /** Couleur moyenne (0..1) d'un carré de n × n pixels autour de (u, v) dans le canvas. */
+  readAverage(u: number, v: number, n = 7): [number, number, number] {
+    const gl = this.gl;
+    const w = this.canvas.width, h = this.canvas.height;
+    const x = Math.max(0, Math.min(w - n, Math.round(u * w - n / 2)));
+    const y = Math.max(0, Math.min(h - n, Math.round((1 - v) * h - n / 2)));
+    const px = new Uint8Array(n * n * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(x, y, n, n, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const m: [number, number, number] = [0, 0, 0];
+    for (let i = 0; i < n * n; i++) for (let k = 0; k < 3; k++) m[k] += px[i * 4 + k] / 255 / (n * n);
+    return m;
+  }
+
+  /**
+   * Histogramme RVB (64 classes par canal) de l'image affichée. Lecture asynchrone
+   * (tampon de pixels + fence) : le thread principal n'attend jamais le GPU.
+   */
+  histogramAsync(bins = 64): Promise<{ r: Uint32Array; g: Uint32Array; b: Uint32Array; l: Uint32Array; total: number } | null> {
+    const gl = this.gl;
+    const w = this.canvas.width, h = this.canvas.height;
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, w * h * 4, gl.STREAM_READ);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    return new Promise((resolve) => {
+      const poll = () => {
+        if (gl.isContextLost() || !sync) { resolve(null); return; }
+        const st = gl.clientWaitSync(sync, 0, 0);
+        if (st === gl.TIMEOUT_EXPIRED) { setTimeout(poll, 20); return; }
+        gl.deleteSync(sync);
+        if (st === gl.WAIT_FAILED) { gl.deleteBuffer(buf); resolve(null); return; }
+        const px = new Uint8Array(w * h * 4);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        gl.deleteBuffer(buf);
+        const r = new Uint32Array(bins), g = new Uint32Array(bins), b = new Uint32Array(bins), l = new Uint32Array(bins);
+        const step = Math.max(1, Math.floor((w * h) / 200_000));
+        const k = bins / 256;
+        let total = 0;
+        for (let i = 0; i < w * h; i += step) {
+          const o = i * 4;
+          r[(px[o] * k) | 0]++; g[(px[o + 1] * k) | 0]++; b[(px[o + 2] * k) | 0]++;
+          l[((0.2126 * px[o] + 0.7152 * px[o + 1] + 0.0722 * px[o + 2]) * k) | 0]++;
+          total++;
+        }
+        resolve({ r, g, b, l, total });
+      };
+      setTimeout(poll, 0);
+    });
   }
 
   /** Attend la fin du rendu GPU (mesures de performance). */

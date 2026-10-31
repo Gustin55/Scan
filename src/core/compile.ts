@@ -1,6 +1,7 @@
 import { IDENTITY3, linearToSrgb, luma, mulMat3, whiteBalanceGains, type Mat3 } from './color.ts';
 import { contrastFn, curveEvaluator, isIdentityCurve, type Curve } from './curves.ts';
 import type { InputColor } from './icc.ts';
+import { defaultGeometry, type Geometry, type Rect } from './geometry.ts';
 import type { FilmLook } from './presets.ts';
 import {
   NEUTRAL_GRAIN, NEUTRAL_HALATION, NEUTRAL_SHARPEN, NEUTRAL_VIGNETTE,
@@ -17,6 +18,8 @@ export interface Analysis {
   confidence: number;
   color: InversionParams;
   bw: InversionParams;
+  /** Zone image détectée à l'intérieur du bord du film (négatifs), ou null. */
+  frame?: Rect | null;
 }
 
 /** Paramètres de rendu « à plat », consommés par le shader et par le pipeline CPU. */
@@ -43,6 +46,7 @@ export interface Compiled {
   sharpen: SharpenParams;
   vignette: VignetteParams;
   grain: GrainParams;
+  geometry: Geometry;
 }
 
 export const BW_WEIGHTS: RGB = [0.2126, 0.7152, 0.0722];
@@ -173,6 +177,7 @@ export function compile({ settings: s, look, analysis, color, packedTrc }: Compi
     halation: scaleEffect(s.halation, look?.halation, NEUTRAL_HALATION, k, ['amount']),
     vignette: scaleEffect(s.vignette, look?.vignette, NEUTRAL_VIGNETTE, k, ['amount']),
     sharpen: scaleEffect(s.sharpen, look?.sharpen, NEUTRAL_SHARPEN, k, ['amount']),
+    geometry: s.geometry ?? defaultGeometry(),
   };
 }
 

@@ -3,6 +3,7 @@ import { get, set } from 'idb-keyval';
 import { compile } from '../core/compile.ts';
 import { buildHalationMap, renderRaster, RenderAborted } from '../core/pipeline.ts';
 import { downscale, type Raster } from '../core/raster.ts';
+import { transformRaster } from '../core/geometry.ts';
 import { encodeTiff } from '../core/tiff/encode.ts';
 import { buildSrgbIcc, type InputColor } from '../core/icc.ts';
 import type { Analysis } from '../core/compile.ts';
@@ -53,7 +54,8 @@ async function thumb(r: ThumbRequest, id: number): Promise<ThumbResult> {
   return { info, analysis, thumb: await renderThumb(proxy, r.settings, r.look, analysis, color) };
 }
 
-async function renderThumb(proxy: Raster, settings: Settings, look: FilmLook | undefined, analysis: Analysis, color: InputColor): Promise<Blob> {
+async function renderThumb(rawProxy: Raster, settings: Settings, look: FilmLook | undefined, analysis: Analysis, color: InputColor): Promise<Blob> {
+  const proxy = transformRaster(rawProxy, settings.geometry);
   const small = downscale(proxy, THUMB_EDGE);
   const c = compile({ settings, look, analysis, color });
   // Le halo de la miniature vient du proxy : même rendu que l'aperçu.
@@ -94,10 +96,12 @@ async function exportImage(r: ExportRequest, id: number): Promise<ExportResult> 
   let full: Raster | undefined;
   const decoded = await decodeFull(r.ref, r.settings.input.transfer, (p) => progress(p * 0.25));
   full = decoded.raster;
-  const proxy = await makeProxy(r.ref, full);
-  const analysis = r.analysis ?? analyzeProxy(proxy, decoded.color);
+  const rawProxy = await makeProxy(r.ref, full);
+  const analysis = r.analysis ?? analyzeProxy(rawProxy, decoded.color);
   const c = compile({ settings: r.settings, look: r.look, analysis, color: decoded.color });
-  const halation = buildHalationMap(proxy, c);
+  // Cadrage appliqué avant le rendu (grain, vignettage et halo suivent l'image cadrée).
+  const halation = buildHalationMap(transformRaster(rawProxy, r.settings.geometry), c);
+  full = transformRaster(full, r.settings.geometry);
   const { width, height } = full;
   const shouldAbort = () => cancelled.has(id);
   if (r.format === 'tiff16') {
