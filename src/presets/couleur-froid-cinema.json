@@ -1,0 +1,15 @@
+{
+  "id": "couleur-froid-cinema",
+  "name": "Négatif cinéma froid, halo rouge",
+  "description": "Ombres bleu-vert, peaux préservées, halo rouge autour des lumières vives. Idéal la nuit.",
+  "category": "couleur",
+  "temperature": -12, "tint": -4,
+  "contrast": 14, "saturation": -4, "fade": 0.03,
+  "mixer": [1.02, 0.0, -0.02, -0.02, 1.03, -0.01, 0.0, 0.03, 0.97],
+  "curves": { "rgb": [[0, 0.02], [0.3, 0.27], [0.7, 0.74], [1, 0.97]], "r": [[0, 0], [0.5, 0.49], [1, 1]], "b": [[0, 0.04], [0.5, 0.52], [1, 0.96]] },
+  "split": { "shadowsHue": 185, "shadowsAmount": 0.14, "highlightsHue": 32, "highlightsAmount": 0.1 },
+  "grain": { "amount": 0.28, "size": 1.3, "roughness": 0.55, "color": 0.25, "luminance": 0.5 },
+  "halation": { "amount": 0.45, "radius": 0.5, "threshold": 0.72 },
+  "vignette": { "amount": 0.18, "midpoint": 0.5, "feather": 0.5 },
+  "sharpen": { "amount": 0.15 }
+}

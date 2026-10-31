@@ -1,0 +1,13 @@
+{
+  "id": "nb-classique-grain-moyen",
+  "name": "Noir et blanc classique, grain moyen",
+  "description": "Gris riches, contraste modéré, grain régulier. Filtre jaune léger (ciels un peu assombris).",
+  "category": "noir et blanc",
+  "monochrome": [0.36, 0.52, 0.12],
+  "contrast": 16, "saturation": 0, "fade": 0.01,
+  "curves": { "rgb": [[0, 0], [0.25, 0.22], [0.75, 0.79], [1, 1]] },
+  "grain": { "amount": 0.32, "size": 1.2, "roughness": 0.55, "color": 0, "luminance": 0.55 },
+  "halation": { "amount": 0.04, "radius": 0.3, "threshold": 0.85 },
+  "vignette": { "amount": 0.15, "midpoint": 0.5, "feather": 0.55 },
+  "sharpen": { "amount": 0.3 }
+}

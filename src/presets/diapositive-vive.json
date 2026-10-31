@@ -1,0 +1,15 @@
+{
+  "id": "diapositive-vive",
+  "name": "Diapositive vive, noirs profonds",
+  "description": "Rendu de film inversible : contraste fort, couleurs pures, peu de latitude dans les ombres.",
+  "category": "diapositive",
+  "temperature": -3, "tint": 2,
+  "contrast": 38, "saturation": 32, "fade": 0,
+  "mixer": [1.1, -0.06, -0.04, -0.04, 1.08, -0.04, -0.03, -0.05, 1.08],
+  "curves": { "rgb": [[0, 0], [0.18, 0.1], [0.5, 0.5], [0.85, 0.92], [1, 1]] },
+  "split": { "shadowsHue": 230, "shadowsAmount": 0.06, "highlightsHue": 55, "highlightsAmount": 0.02 },
+  "grain": { "amount": 0.1, "size": 0.7, "roughness": 0.3, "color": 0.1, "luminance": 0.7 },
+  "halation": { "amount": 0.05, "radius": 0.25, "threshold": 0.85 },
+  "vignette": { "amount": 0.22, "midpoint": 0.5, "feather": 0.5 },
+  "sharpen": { "amount": 0.35 }
+}

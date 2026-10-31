@@ -1,0 +1,15 @@
+{
+  "id": "couleur-portrait-doux",
+  "name": "Négatif couleur portrait, doux et pastel",
+  "description": "Contraste bas, couleurs légèrement désaturées, peau naturelle. Grain très fin.",
+  "category": "couleur",
+  "temperature": 6, "tint": 4,
+  "contrast": -12, "saturation": -10, "fade": 0.04,
+  "mixer": [1.0, 0.02, -0.02, 0.0, 1.0, 0.0, -0.02, 0.03, 0.99],
+  "curves": { "rgb": [[0, 0.03], [0.5, 0.52], [1, 0.97]], "g": [[0, 0.01], [1, 0.99]] },
+  "split": { "shadowsHue": 180, "shadowsAmount": 0.05, "highlightsHue": 30, "highlightsAmount": 0.05 },
+  "grain": { "amount": 0.12, "size": 0.8, "roughness": 0.3, "color": 0.1, "luminance": 0.6 },
+  "halation": { "amount": 0.08, "radius": 0.4, "threshold": 0.82 },
+  "vignette": { "amount": 0.08, "midpoint": 0.6, "feather": 0.7 },
+  "sharpen": { "amount": 0.1 }
+}

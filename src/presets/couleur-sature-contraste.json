@@ -1,0 +1,15 @@
+{
+  "id": "couleur-sature-contraste",
+  "name": "Négatif couleur saturé, contraste marqué",
+  "description": "Couleurs franches, rouges profonds, ombres denses. Pour les paysages et la rue en plein soleil.",
+  "category": "couleur",
+  "temperature": 4, "tint": -2,
+  "contrast": 28, "saturation": 24, "fade": 0,
+  "mixer": [1.08, -0.05, -0.03, -0.03, 1.06, -0.03, -0.02, -0.04, 1.06],
+  "curves": { "rgb": [[0, 0], [0.2, 0.15], [0.8, 0.86], [1, 1]] },
+  "split": { "shadowsHue": 210, "shadowsAmount": 0.05, "highlightsHue": 45, "highlightsAmount": 0.04 },
+  "grain": { "amount": 0.22, "size": 1.1, "roughness": 0.5, "color": 0.2, "luminance": 0.55 },
+  "halation": { "amount": 0.1, "radius": 0.3, "threshold": 0.8 },
+  "vignette": { "amount": 0.15, "midpoint": 0.5, "feather": 0.55 },
+  "sharpen": { "amount": 0.3 }
+}

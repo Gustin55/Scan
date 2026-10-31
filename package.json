@@ -1,0 +1,37 @@
+{
+  "name": "scan-pellicule",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Conversion de négatifs et émulation de pellicule, 100 % dans le navigateur.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "fixtures": "node --experimental-strip-types scripts/gen-fixtures.ts",
+    "fixtures:big": "node --experimental-strip-types scripts/gen-fixtures.ts --big"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "idb-keyval": "^6.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "fake-indexeddb": "^6.2.7",
+    "jpeg-js": "^0.4.4",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

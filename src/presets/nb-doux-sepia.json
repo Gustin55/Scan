@@ -1,0 +1,14 @@
+{
+  "id": "nb-doux-sepia",
+  "name": "Noir et blanc doux, virage sépia",
+  "description": "Tons chauds, noirs adoucis, grain fin. Rendu de tirage baryté viré.",
+  "category": "noir et blanc",
+  "monochrome": [0.3, 0.59, 0.11],
+  "contrast": -6, "saturation": 0, "fade": 0.05,
+  "curves": { "rgb": [[0, 0.03], [0.5, 0.52], [1, 0.97]] },
+  "split": { "shadowsHue": 30, "shadowsAmount": 0.16, "highlightsHue": 42, "highlightsAmount": 0.12 },
+  "grain": { "amount": 0.16, "size": 0.9, "roughness": 0.4, "color": 0, "luminance": 0.6 },
+  "halation": { "amount": 0.0, "radius": 0.3, "threshold": 0.85 },
+  "vignette": { "amount": 0.2, "midpoint": 0.5, "feather": 0.6 },
+  "sharpen": { "amount": 0.15 }
+}

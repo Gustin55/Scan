@@ -1,0 +1,13 @@
+{
+  "id": "nb-contraste-fort",
+  "name": "Noir et blanc dur, filtre rouge",
+  "description": "Ciels presque noirs, blancs éclatants, grain marqué. Développement poussé.",
+  "category": "noir et blanc",
+  "monochrome": [0.62, 0.36, 0.02],
+  "contrast": 42, "saturation": 0, "fade": 0,
+  "curves": { "rgb": [[0, 0], [0.2, 0.12], [0.8, 0.9], [1, 1]] },
+  "grain": { "amount": 0.45, "size": 1.5, "roughness": 0.7, "color": 0, "luminance": 0.5 },
+  "halation": { "amount": 0.0, "radius": 0.3, "threshold": 0.85 },
+  "vignette": { "amount": 0.25, "midpoint": 0.45, "feather": 0.5 },
+  "sharpen": { "amount": 0.45 }
+}

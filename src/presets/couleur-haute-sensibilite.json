@@ -1,0 +1,15 @@
+{
+  "id": "couleur-haute-sensibilite",
+  "name": "Négatif couleur haute sensibilité, gros grain",
+  "description": "Grain visible et coloré, noirs relevés, couleurs un peu dérivées vers le vert. Ambiance de soirée.",
+  "category": "couleur",
+  "temperature": 2, "tint": -8,
+  "contrast": 6, "saturation": -6, "fade": 0.06,
+  "mixer": [1.0, 0.02, -0.02, -0.02, 1.04, -0.02, -0.02, 0.04, 0.98],
+  "curves": { "rgb": [[0, 0.05], [0.5, 0.5], [1, 0.95]], "g": [[0, 0.02], [1, 1]] },
+  "split": { "shadowsHue": 150, "shadowsAmount": 0.08, "highlightsHue": 50, "highlightsAmount": 0.05 },
+  "grain": { "amount": 0.5, "size": 1.8, "roughness": 0.7, "color": 0.45, "luminance": 0.45 },
+  "halation": { "amount": 0.18, "radius": 0.45, "threshold": 0.78 },
+  "vignette": { "amount": 0.2, "midpoint": 0.45, "feather": 0.5 },
+  "sharpen": { "amount": 0.05 }
+}
