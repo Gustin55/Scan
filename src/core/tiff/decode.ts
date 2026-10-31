@@ -31,6 +31,8 @@ export const TAG = {
 
 export class TiffError extends Error {}
 
+const HOST_LE = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+
 interface Ifd {
   tags: Map<number, number[] | Uint8Array>;
 }
@@ -227,8 +229,6 @@ export function decodeTiff(buf: ArrayBuffer | Uint8Array, opts: DecodeOptions = 
   const planes = planar === 2 ? spp : 1;
   const sampPerBlockPixel = planar === 2 ? 1 : spp;
   const rowBytes = blockW * sampPerBlockPixel * bytesPer;
-  const view = new DataView(r.bytes.buffer, r.bytes.byteOffset, r.bytes.byteLength);
-  void view;
 
   const total = offsets.length;
   let doneBlocks = 0;
@@ -243,7 +243,7 @@ export function decodeTiff(buf: ArrayBuffer | Uint8Array, opts: DecodeOptions = 
         const expected = rowBytes * rowsInBlock;
         let data = decompress(compression, r.bytes.subarray(off, off + cnt), expected);
         if (predictor === 2) {
-          if (data === r.bytes.subarray(off, off + cnt) || compression === 1) data = data.slice();
+          if (compression === 1) data = data.slice();
           undoHorizontalPredictor(data, rowBytes, rowsInBlock, sampPerBlockPixel, bps, r.le);
         } else if (predictor === 3) {
           throw new TiffError('Prédicteur flottant TIFF non pris en charge.');
@@ -253,10 +253,27 @@ export function decodeTiff(buf: ArrayBuffer | Uint8Array, opts: DecodeOptions = 
         const y0 = by * blockH;
         const wIn = Math.min(blockW, width - x0);
         const hIn = Math.min(rowsInBlock, height - y0);
+        // Chemin rapide : 16 bits petit-boutiste entrelacé sans canal supplémentaire (cas courant).
+        const fast16 = bps === 16 && r.le && planar === 1 && spp === outCh && !invert && HOST_LE;
         for (let yy = 0; yy < hIn; yy++) {
           const rowOff = yy * rowBytes;
           if (rowOff >= data.length) break;
           const dstRow = (y0 + yy) * width;
+          if (fast16 && rowOff + wIn * spp * 2 <= data.length) {
+            const start = data.byteOffset + rowOff;
+            const n = wIn * spp;
+            const src = start % 2 === 0 ? new Uint16Array(data.buffer, start, n) : new Uint16Array(data.slice(rowOff, rowOff + n * 2).buffer);
+            out.set(src, (dstRow + x0) * outCh);
+            continue;
+          }
+          if (bps === 8 && planar === 1 && !invert) {
+            for (let xx = 0; xx < wIn; xx++) {
+              const px = rowOff + xx * spp;
+              const dst = (dstRow + x0 + xx) * outCh;
+              for (let c = 0; c < outCh; c++) out[dst + c] = data[px + c] * 257;
+            }
+            continue;
+          }
           for (let xx = 0; xx < wIn; xx++) {
             const px = rowOff + xx * sampPerBlockPixel * bytesPer;
             const dst = (dstRow + x0 + xx) * outCh;

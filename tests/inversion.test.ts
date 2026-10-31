@@ -53,6 +53,7 @@ describe('détection', () => {
   it('reconnaît un négatif couleur et un positif', () => {
     expect(analyze(neg, srgb).detectedKind).toBe('negative-color');
     expect(analyze(sceneToRaster(scene, W, H), srgb).detectedKind).toBe('positive');
+    expect(analyze(simulateNegative(scene, W, H, B, COLOR_FILM, true), srgb).detectedKind).toBe('negative-bw');
   });
 });
 

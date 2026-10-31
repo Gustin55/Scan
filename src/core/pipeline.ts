@@ -37,7 +37,7 @@ function decodeSrgb(v: number): number {
  */
 export function stage1(c: Compiled, r: number, g: number, b: number, out: Float32Array, o: number): void {
   const n = c.trcSize;
-  let lr = lut(c.trc, n, 0, r), lg = lut(c.trc, n, 1, g), lb = lut(c.trc, n, 2, b);
+  const lr = lut(c.trc, n, 0, r), lg = lut(c.trc, n, 1, g), lb = lut(c.trc, n, 2, b);
   const M = c.toSrgb;
   let x = M[0] * lr + M[1] * lg + M[2] * lb;
   let y = M[3] * lr + M[4] * lg + M[5] * lb;
@@ -60,11 +60,41 @@ export function stage1(c: Compiled, r: number, g: number, b: number, out: Float3
     z = decodeSrgb(Math.pow(q < 0 ? 0 : q, c.gamma[2]));
   }
 
+  stageTail(c, x, y, z, out, o);
+}
+
+/**
+ * Table 16 bits → valeur linéaire après inversion, par canal. Valable seulement si les
+ * canaux sont indépendants (pas de matrice d'entrée, pas de N&B) : accélère l'export.
+ */
+export function buildInputLut(c: Compiled): [Float32Array, Float32Array, Float32Array] | null {
+  const M = c.toSrgb;
+  const identity = M.every((v, i) => Math.abs(v - (i % 4 === 0 ? 1 : 0)) < 1e-6);
+  if (!identity || c.mode === 2) return null;
+  const luts: Float32Array[] = [];
+  for (let ch = 0; ch < 3; ch++) {
+    const t = new Float32Array(65536);
+    for (let v = 0; v < 65536; v++) {
+      let x = lut(c.trc, c.trcSize, ch, v / 65535);
+      if (c.mode === 1) {
+        const p = Math.log(c.base[ch] / Math.max(1e-6, x)) / LOG10;
+        const q = (p - c.dmin[ch]) / c.drange[ch];
+        x = decodeSrgb(Math.pow(q < 0 ? 0 : q, c.gamma[ch]));
+      }
+      t[v] = x;
+    }
+    luts.push(t);
+  }
+  return luts as [Float32Array, Float32Array, Float32Array];
+}
+
+/** Fin de l'étape 1, à partir de valeurs linéaires (après inversion). */
+export function stageTail(c: Compiled, x: number, y: number, z: number, out: Float32Array, o: number): void {
   x *= c.gains[0]; y *= c.gains[1]; z *= c.gains[2];
   const X = c.mixer;
-  lr = X[0] * x + X[1] * y + X[2] * z;
-  lg = X[3] * x + X[4] * y + X[5] * z;
-  lb = X[6] * x + X[7] * y + X[8] * z;
+  const lr = X[0] * x + X[1] * y + X[2] * z;
+  const lg = X[3] * x + X[4] * y + X[5] * z;
+  const lb = X[6] * x + X[7] * y + X[8] * z;
 
   let er = lut(c.tone, TONE_LUT_SIZE, 0, encodeSrgb(lr));
   let eg = lut(c.tone, TONE_LUT_SIZE, 1, encodeSrgb(lg));
@@ -258,9 +288,19 @@ export class RenderAborted extends Error {
 export function renderRaster(src: Raster, c: Compiled, opts: RenderOptions): Uint8ClampedArray | Uint16Array {
   const { width: W, height: H, channels: ch } = src;
   const out = opts.output === 'rgba8' ? new Uint8ClampedArray(W * H * 4) : new Uint16Array(W * H * 3);
+  const inLut = W * H > 250_000 ? buildInputLut(c) : null;
   const rowOf = (y: number, buf: Float32Array) => {
     const base = y * W * ch;
     const d = src.data;
+    if (inLut) {
+      const [lr, lg, lb] = inLut;
+      for (let x = 0; x < W; x++) {
+        const s = base + x * ch;
+        if (ch === 3) stageTail(c, lr[d[s]], lg[d[s + 1]], lb[d[s + 2]], buf, x * 3);
+        else stageTail(c, lr[d[s]], lg[d[s]], lb[d[s]], buf, x * 3);
+      }
+      return;
+    }
     for (let x = 0; x < W; x++) {
       const s = base + x * ch;
       const r = d[s] / 65535;

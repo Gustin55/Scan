@@ -214,3 +214,23 @@ describe('réglages JSON', () => {
     expect(() => settingsFromJson('{"foo": 1}')).toThrow();
   });
 });
+
+describe('chemin rapide de l’export', () => {
+  it('la table d’entrée donne le même résultat que le calcul pixel par pixel', async () => {
+    const { analyze } = await import('../src/core/analysis.ts');
+    const { sceneLinear, simulateNegative } = await import('./synth.ts');
+    const W = 600, H = 440;
+    const neg = simulateNegative(sceneLinear(W, H), W, H, 10);
+    const s = defaultSettings();
+    s.input.kind = 'negative-color';
+    const c = compile({ settings: s, analysis: analyze(neg, srgb), color: srgb });
+    const fast = renderRaster(neg, c, { output: 'rgb16' }) as Uint16Array; // > 250 000 px : table
+    const px = new Float32Array(3);
+    let maxErr = 0;
+    for (let i = 0; i < neg.width * neg.height; i += 997) {
+      stage1(c, neg.data[i * 3] / 65535, neg.data[i * 3 + 1] / 65535, neg.data[i * 3 + 2] / 65535, px, 0);
+      for (let k = 0; k < 3; k++) maxErr = Math.max(maxErr, Math.abs(Math.min(1, Math.max(0, px[k])) * 65535 - fast[i * 3 + k]));
+    }
+    expect(maxErr).toBeLessThan(65535 * 0.004);
+  });
+});

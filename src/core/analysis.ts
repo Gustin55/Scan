@@ -149,7 +149,21 @@ export function detectKind(lin: Float32Array, w: number, h: number): { kind: Ana
   // Un masque orange donne typiquement V/R ≈ 0,4–0,75 et B/V ≈ 0,3–0,7.
   const orange = rg < 0.8 && gb < 0.8 && r > 0.04;
   const score = Math.min(1, Math.max(0, (0.85 - rg) * 2.5) * Math.min(1, Math.max(0, (0.85 - gb) * 2.5)));
-  return orange ? { kind: 'negative-color', confidence: Math.max(0.5, score) } : { kind: 'positive', confidence: 1 - score };
+  if (orange) return { kind: 'negative-color', confidence: Math.max(0.5, score) };
+  // Négatif N&B : image neutre dont le bord (support clair non exposé) est plus lumineux
+  // que presque toute l'image. Sans bord visible, on ne peut pas trancher : positif.
+  const neutral = Math.abs(rg - 1) < 0.06 && Math.abs(gb - 1) < 0.06;
+  if (neutral) {
+    const border = borderMask(w, h, 0.03);
+    const inner: number[] = [], edge: number[] = [];
+    for (let i = 0; i < n; i += step) (border[i] ? edge : inner).push(lin[i * 3 + 1]);
+    for (let i = 0; i < n; i++) if (border[i] && (i % 7 === 0)) edge.push(lin[i * 3 + 1]);
+    const pct = (a: number[], p: number) => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(p * (s.length - 1))] ?? 0; };
+    if (edge.length > 8 && inner.length > 8 && pct(edge, 0.5) > pct(inner, 0.95) * 0.98 && pct(edge, 0.5) > 0.05) {
+      return { kind: 'negative-bw', confidence: 0.6 };
+    }
+  }
+  return { kind: 'positive', confidence: 1 - score };
 }
 
 export function analyze(proxy: Raster, color: InputColor): Analysis {
